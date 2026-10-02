@@ -412,17 +412,16 @@ async def kick_loop(request):
     }, status=202)
 
 async def _run_kick_job(job_id, room, targets, socket_entries, loops, burst, combo, delay_target, delay_batch):
-        job_id = uuid.uuid4().hex[:12]
         combo_bursts = {"combo1": (2, 3), "combo2": (3, 4)}
         if combo in combo_bursts:
             b1, b2 = combo_bursts[combo]
             combo_waves = max((len(targets) + b1 - 1) // b1, (len(targets) + b2 - 1) // b2)
             total_per_socket = sum(min(b1, max(0, len(targets) - i*b1)) for i in range((len(targets)+b1-1)//b1)) + sum(min(b2, max(0, len(targets) - i*b2)) for i in range((len(targets)+b2-1)//b2))
-            total_jobs = loops * total_per_socket * len(sockets)
+            total_jobs = loops * total_per_socket * len(socket_entries)
             per_socket_total = loops * total_per_socket
         else:
             combo_waves = 0
-            total_jobs = loops * len(targets) * len(sockets)
+            total_jobs = loops * len(targets) * len(socket_entries)
             per_socket_total = loops * len(targets)
         socket_stats = {
             ws_name: {"totalJobs": per_socket_total, "dispatchedJobs": 0, "failedJobs": 0, "lastTarget": "", "lastLoop": 0}
@@ -436,7 +435,7 @@ async def _run_kick_job(job_id, room, targets, socket_entries, loops, burst, com
             ]
 
         progress = {"jobId": job_id, "phase": "started", "totalJobs": total_jobs,
-                    "dispatchedJobs": 0, "failedJobs": 0, "websockets": len(sockets),
+                    "dispatchedJobs": 0, "failedJobs": 0, "websockets": len(socket_entries),
                     "targets": len(targets), "loop": loops, "burst": burst, "combo": combo,
                     "kickLimit": KICK_LIMIT_LABEL, "socketReports": socket_reports()}
         await publish_kick_progress(progress)
@@ -522,7 +521,7 @@ async def _run_kick_job(job_id, room, targets, socket_entries, loops, burst, com
                     "jobId": job_id, "phase": "progress",
                     "totalJobs": total_jobs, "dispatchedJobs": current_total,
                     "failedJobs": current_failed,
-                    "websockets": len(sockets),
+                    "websockets": len(socket_entries),
                     "loop": loop_no + 1, "loops": loops,
                     "target": current_target, "websocket": ws_name,
                     "replacement": bool(is_replacement),
@@ -581,20 +580,14 @@ async def _run_kick_job(job_id, room, targets, socket_entries, loops, burst, com
         await publish_kick_progress({
             "jobId": job_id, "phase": "done", "totalJobs": total_jobs,
             "dispatchedJobs": total, "failedJobs": failed,
-            "websockets": len(sockets), "targets": len(targets),
+            "websockets": len(socket_entries), "targets": len(targets),
             "loop": loops, "burst": burst, "combo": combo,
             "replacement": True, "kickedTargets": len(replacement_state["kicked"]),
             "replacementDispatched": replacement_state["replacement_dispatched"],
             "kickLimit": KICK_LIMIT_LABEL,
             "socketReports": reports
         })
-        return web.json_response({"ok": True, "jobId": job_id, "totalJobs": total_jobs,
-                                  "dispatchedJobs": total, "failedJobs": failed,
-                                  "websockets": len(sockets), "targets": len(targets),
-                                  "loop": loops, "burst": burst, "combo": combo,
-                                  "replacement": True, "kickedTargets": len(replacement_state["kicked"]),
-                                  "replacementDispatched": replacement_state["replacement_dispatched"],
-                                  "kickLimit": KICK_LIMIT_LABEL, "socketReports": reports})
+        return None
 
 async def suicide(request):
     try:
